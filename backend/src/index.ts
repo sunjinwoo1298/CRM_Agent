@@ -19,6 +19,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api", analyzeRouter);
 app.use("/api/merge", mergeRouter);
+app.use("/api/hubspot", mergeRouter);
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {

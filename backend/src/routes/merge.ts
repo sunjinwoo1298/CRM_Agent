@@ -5,6 +5,43 @@ import { getAccountToken, setAccountToken } from "../store/accountTokens";
 
 export const mergeRouter = Router();
 
+function extractUpstreamError(responseData: unknown): string {
+  if (typeof responseData === "string") {
+    return responseData.trim();
+  }
+
+  if (responseData && typeof responseData === "object") {
+    const data = responseData as {
+      error?: unknown;
+      detail?: unknown;
+      message?: unknown;
+      non_field_errors?: unknown;
+    };
+
+    if (typeof data.error === "string" && data.error.trim()) {
+      return data.error.trim();
+    }
+    if (typeof data.detail === "string" && data.detail.trim()) {
+      return data.detail.trim();
+    }
+    if (typeof data.message === "string" && data.message.trim()) {
+      return data.message.trim();
+    }
+    if (Array.isArray(data.non_field_errors)) {
+      const merged = data.non_field_errors
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join("; ");
+      if (merged) {
+        return merged;
+      }
+    }
+  }
+
+  return "";
+}
+
 mergeRouter.post("/link-token", async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.MERGE_API_KEY;
@@ -38,8 +75,14 @@ mergeRouter.post("/link-token", async (req: Request, res: Response) => {
 
     return res.json({ link_token: linkTokenRes.data.link_token });
   } catch (err: any) {
-    const message = err?.response?.data ?? err?.message ?? "Unknown error";
     const status = err?.response?.status ?? 500;
+    const responseData = err?.response?.data;
+    const responseText = extractUpstreamError(responseData);
+    const message =
+      responseText ||
+      err?.response?.statusText ||
+      err?.message ||
+      `Upstream request failed (${status})`;
     return res.status(status).json({ error: message });
   }
 });
@@ -78,8 +121,14 @@ mergeRouter.post("/account-token", async (req: Request, res: Response) => {
 
     return res.json({ account_token });
   } catch (err: any) {
-    const message = err?.response?.data ?? err?.message ?? "Unknown error";
     const status = err?.response?.status ?? 500;
+    const responseData = err?.response?.data;
+    const responseText = extractUpstreamError(responseData);
+    const message =
+      responseText ||
+      err?.response?.statusText ||
+      err?.message ||
+      `Upstream request failed (${status})`;
     return res.status(status).json({ error: message });
   }
 });
