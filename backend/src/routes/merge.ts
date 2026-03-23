@@ -117,7 +117,7 @@ mergeRouter.post("/account-token", async (req: Request, res: Response) => {
         .json({ error: "Merge did not return account_token" });
     }
 
-    setAccountToken(end_user_origin_id, account_token);
+    await setAccountToken(end_user_origin_id, account_token);
 
     return res.json({ account_token });
   } catch (err: any) {
@@ -133,7 +133,7 @@ mergeRouter.post("/account-token", async (req: Request, res: Response) => {
   }
 });
 
-mergeRouter.get("/account-token", (req: Request, res: Response) => {
+mergeRouter.get("/account-token", async (req: Request, res: Response) => {
   const endUserOriginId = String(req.query.end_user_origin_id ?? "");
   if (!endUserOriginId) {
     return res
@@ -141,6 +141,12 @@ mergeRouter.get("/account-token", (req: Request, res: Response) => {
       .json({ error: "end_user_origin_id query param is required" });
   }
 
-  const token = getAccountToken(endUserOriginId);
-  return res.json({ account_token: token ?? null });
+  try {
+    const token = await getAccountToken(endUserOriginId);
+    return res.json({ account_token: token ?? null });
+  } catch (err: any) {
+    const message =
+      err?.message || "Failed to retrieve token";
+    return res.status(500).json({ error: message });
+  }
 });

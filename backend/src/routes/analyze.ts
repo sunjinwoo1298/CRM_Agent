@@ -103,7 +103,7 @@ function buildUnifiedSummary(data: UnifiedDashboardData) {
 }
 
 async function fetchDealsForUser(endUserOriginId: string): Promise<Deal[]> {
-  const accountToken = getAccountToken(endUserOriginId);
+  const accountToken = await getAccountToken(endUserOriginId);
   if (!accountToken) {
     throw Object.assign(
       new Error(
@@ -170,7 +170,7 @@ async function fetchMergeCollection<T extends Record<string, unknown>>(
 }
 
 async function fetchUnifiedDashboardData(endUserOriginId: string): Promise<UnifiedDashboardData> {
-  const accountToken = getAccountToken(endUserOriginId);
+  const accountToken = await getAccountToken(endUserOriginId);
   if (!accountToken) {
     throw Object.assign(
       new Error(
