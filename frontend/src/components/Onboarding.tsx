@@ -1,110 +1,74 @@
-import React, { useState, useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-declare global {
-  interface Window {
-    MergeLink: {
-      open: (config: any) => void;
-    };
-  }
-}
+import { useMergeLink } from "@mergeapi/react-merge-link";
+import { api } from "../api";
 
 export function Onboarding() {
   const [step, setStep] = useState(1);
-  const [crmConnected, setCrmConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [endUserOriginId, setEndUserOriginId] = useState("");
+  const [linkToken, setLinkToken] = useState<string>("");
 
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Initialize Merge Link
+  const onSuccess = useCallback(async (public_token: string) => {
+    try {
+      setIsLoading(true);
+      await api.post("/api/merge/account-token", {
+        public_token,
+        end_user_origin_id: user?.userid,
+      });
+      setStep(2);
+    } catch (err: any) {
+      console.error("Token exchange error:", err);
+      const message = err?.response?.data?.error ?? err?.message ?? "Failed to connect CRM";
+      alert(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  const { open, isReady } = useMergeLink(
+    useMemo(
+      () => ({
+        linkToken,
+        onSuccess,
+      }),
+      [linkToken, onSuccess]
+    )
+  );
+
   const openMergeLink = useCallback(async () => {
     if (!user) {
       alert("User not found");
       return;
     }
 
-    try {
-      // Generate a unique end_user_origin_id based on user
-      const originId = `user_${user.userid}`;
-      setEndUserOriginId(originId);
-
-      // Fetch link token from backend
-      const response = await fetch("http://localhost:3001/api/merge/link-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          end_user_origin_id: originId,
-          end_user_organization_name: user.org_name || "Unknown Org",
-          end_user_email_address: user.email || "noemail@example.com",
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to create link token");
-      }
-
-      const data = await response.json();
-      const linkToken = data.link_token;
-
-      // Open Merge Link widget
-      if (window.MergeLink) {
-        window.MergeLink.open({
-          linkToken,
-          onSuccess: (publicToken: string) => {
-            handleMergeLinkSuccess(publicToken, originId);
-          },
-          onError: (error: any) => {
-            console.error("Merge Link error:", error);
-            alert("Failed to connect CRM");
-          },
-        });
-      } else {
-        alert("Merge Link widget not loaded. Make sure to include the Merge Link script.");
-      }
-    } catch (err) {
-      console.error("Error opening Merge Link:", err);
-      alert(err instanceof Error ? err.message : "Failed to open CRM connection");
+    if (!isReady) {
+      alert("Merge Link widget is still loading. Please try again in a moment.");
+      return;
     }
-  }, [user, token]);
 
-  async function handleMergeLinkSuccess(publicToken: string, originId: string) {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-
-      // Exchange public token for account token
-      const response = await fetch("http://localhost:3001/api/merge/account-token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          public_token: publicToken,
-          end_user_origin_id: originId,
-        }),
+      const response = await api.post("/api/merge/link-token", {
+        end_user_origin_id: user.userid,
+        end_user_organization_name: user.org_name || "Unknown Org",
+        end_user_email_address: user.email || "noemail@example.com",
       });
+      setLinkToken(response.data.link_token);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to exchange token");
-      }
-
-      setCrmConnected(true);
-      setStep(2);
-    } catch (err) {
-      console.error("Token exchange error:", err);
-      alert(err instanceof Error ? err.message : "Failed to connect CRM");
+      // Wait for state update so hook sees the new token.
+      setTimeout(() => open(), 0);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ?? err?.message ?? "Failed to create link token";
+      alert(message);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [isReady, open, user]);
 
   function handleSkip() {
     navigate("/");
@@ -164,6 +128,12 @@ export function Onboarding() {
               >
                 {isLoading ? "Connecting..." : "🔗 Connect Your CRM"}
               </button>
+
+              {!isReady ? (
+                <p className="text-xs text-gray-500">
+                  Preparing Merge Link widget...
+                </p>
+              ) : null}
 
               <button
                 onClick={handleSkip}

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { api } from "../api";
 
 export interface User {
   userid: string;
@@ -42,37 +43,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function fetchUserProfile(authToken: string): Promise<User> {
-    const response = await fetch("http://localhost:3001/api/auth/me", {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch user profile");
+    try {
+      const response = await api.get("/api/auth/me", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = response.data;
+      setUser(data.user);
+      return data.user;
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ??
+        err?.message ??
+        "Failed to fetch user profile";
+      throw new Error(message);
     }
-
-    const data = await response.json();
-    setUser(data.user);
-    return data.user;
   }
 
   async function login(username: string, password: string): Promise<void> {
-    const response = await fetch("http://localhost:3001/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Login failed");
+    try {
+      const response = await api.post("/api/auth/login", { username, password });
+      const data = response.data;
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem("auth_token", data.token);
+    } catch (err: any) {
+      const message = err?.response?.data?.error ?? err?.message ?? "Login failed";
+      throw new Error(message);
     }
-
-    const data = await response.json();
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem("auth_token", data.token);
   }
 
   async function register(
@@ -81,21 +78,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     orgName?: string
   ): Promise<void> {
-    const response = await fetch("http://localhost:3001/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, org_name: orgName }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Registration failed");
+    try {
+      const response = await api.post("/api/auth/register", {
+        username,
+        email,
+        password,
+        org_name: orgName,
+      });
+      const data = response.data;
+      setToken(data.token);
+      setUser(data.user);
+      localStorage.setItem("auth_token", data.token);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ?? err?.message ?? "Registration failed";
+      throw new Error(message);
     }
-
-    const data = await response.json();
-    setToken(data.token);
-    setUser(data.user);
-    localStorage.setItem("auth_token", data.token);
   }
 
   function logout(): void {

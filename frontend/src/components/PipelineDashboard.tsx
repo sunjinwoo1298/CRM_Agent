@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useMergeLink } from "@mergeapi/react-merge-link";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext";
 import type { PipelineAnalysisReport } from "../contracts/report";
 import type { CrmRecord, UnifiedDashboardResponse } from "../contracts/unifiedDashboard";
 
@@ -75,7 +76,8 @@ function renderCompactTable(
 }
 
 export function PipelineDashboard() {
-  const [endUserOriginId, setEndUserOriginId] = useState("demo-user-1");
+  const { user } = useAuth();
+  const endUserOriginId = user?.userid ?? "";
   const [linkToken, setLinkToken] = useState<string>("");
   const [accountToken, setAccountToken] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<UnifiedDashboardResponse | null>(null);
@@ -87,6 +89,9 @@ export function PipelineDashboard() {
     setBusy(true);
     setError(null);
     try {
+      if (!endUserOriginId) {
+        throw new Error("User not loaded yet");
+      }
       const res = await api.post("/api/merge/link-token", {
         end_user_origin_id: endUserOriginId,
         end_user_organization_name: "Demo Org",
@@ -105,6 +110,9 @@ export function PipelineDashboard() {
       setBusy(true);
       setError(null);
       try {
+        if (!endUserOriginId) {
+          throw new Error("User not loaded yet");
+        }
         const res = await api.post("/api/merge/account-token", {
           public_token,
           end_user_origin_id: endUserOriginId,
@@ -134,6 +142,9 @@ export function PipelineDashboard() {
     setError(null);
     setReport(null);
     try {
+      if (!endUserOriginId) {
+        throw new Error("User not loaded yet");
+      }
       const res = await api.post<PipelineAnalysisReport>("/api/analyze-pipeline", {
         end_user_origin_id: endUserOriginId,
       });
@@ -157,6 +168,9 @@ export function PipelineDashboard() {
     setBusy(true);
     setError(null);
     try {
+      if (!endUserOriginId) {
+        throw new Error("User not loaded yet");
+      }
       const res = await api.post<UnifiedDashboardResponse>("/api/hubspot/unified-dashboard", {
         end_user_origin_id: endUserOriginId,
       });
@@ -192,25 +206,22 @@ export function PipelineDashboard() {
         </div>
 
         <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
-          <label className="block text-sm font-medium text-gray-700">End user origin id</label>
-          <input
-            value={endUserOriginId}
-            onChange={(e) => setEndUserOriginId(e.target.value)}
-            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            placeholder="e.g. customer-123"
-          />
+          <label className="block text-sm font-medium text-gray-700">User</label>
+          <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+            {endUserOriginId || "Loading user..."}
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               onClick={createLinkToken}
-              disabled={busy}
+              disabled={busy || !endUserOriginId}
               className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               1) Get link token
             </button>
             <button
               onClick={open}
-              disabled={!isReady || !linkToken || busy}
+              disabled={!isReady || !linkToken || busy || !endUserOriginId}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               2) Connect HubSpot
