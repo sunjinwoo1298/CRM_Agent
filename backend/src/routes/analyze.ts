@@ -5,6 +5,7 @@ import { CrmManager } from "../crm/CrmManager";
 import { MergeProvider } from "../crm/providers/MergeProvider";
 import type { Deal } from "../contracts/deal";
 import { getAccountToken } from "../store/accountTokens";
+import { requireAuth } from "./auth";
 
 export const analyzeRouter = Router();
 
@@ -32,6 +33,27 @@ type UnifiedDashboardData = {
   companies: CrmRecord[];
   engagements: CrmRecord[];
   warnings: string[];
+};
+
+type RiskLevel = "high" | "medium" | "low";
+
+type DealRisk = {
+  deal_id: string;
+  deal_name: string;
+  amount: number | null;
+  stage: string | null;
+  last_activity: string | null;
+  risk_level: RiskLevel;
+  signals: string[];
+};
+
+type PipelineAnalysisReport = {
+  summary: {
+    total_deals: number;
+    high_risk_count: number;
+  };
+  high_risk_deals: DealRisk[];
+  all_deals: DealRisk[];
 };
 
 function extractUpstreamError(responseData: unknown): string {
@@ -102,8 +124,85 @@ function buildUnifiedSummary(data: UnifiedDashboardData) {
   };
 }
 
-async function fetchDealsForUser(endUserOriginId: string): Promise<Deal[]> {
-  const accountToken = await getAccountToken(endUserOriginId);
+function parseLastActivity(lastActivity: string | null): Date | null {
+  if (!lastActivity) {
+    return null;
+  }
+  const parsed = new Date(lastActivity);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
+function analyzeDealsLocally(deals: Deal[]): PipelineAnalysisReport {
+  const now = Date.now();
+
+  const allDeals: DealRisk[] = deals.map((deal) => {
+    const signals: string[] = [];
+    const lastDt = parseLastActivity(deal.last_activity);
+
+    if (!lastDt) {
+      signals.push("No recorded last activity");
+    } else {
+      const days = Math.floor((now - lastDt.getTime()) / (24 * 60 * 60 * 1000));
+      if (days >= 21) {
+        signals.push(`No activity for ${days} days`);
+      } else if (days >= 14) {
+        signals.push(`Low activity: last touched ${days} days ago`);
+      }
+    }
+
+    const stage = (deal.stage ?? "").toLowerCase();
+    if (["proposal", "negotiation", "contract", "legal"].includes(stage)) {
+      const staleLateStage = !lastDt || now - lastDt.getTime() >= 14 * 24 * 60 * 60 * 1000;
+      if (staleLateStage) {
+        signals.push("Late-stage deal with low activity");
+      }
+    }
+
+    if (deal.amount !== null && deal.amount <= 0) {
+      signals.push("Non-positive amount");
+    }
+
+    let riskLevel: RiskLevel = "low";
+    if (
+      signals.some((s) => s.startsWith("No activity for")) ||
+      signals.includes("Late-stage deal with low activity")
+    ) {
+      riskLevel = "high";
+    } else if (signals.length > 0) {
+      riskLevel = "medium";
+    }
+
+    return {
+      deal_id: deal.id,
+      deal_name: deal.name,
+      amount: deal.amount,
+      stage: deal.stage,
+      last_activity: deal.last_activity,
+      risk_level: riskLevel,
+      signals,
+    };
+  });
+
+  const highRiskDeals = allDeals.filter((deal) => deal.risk_level === "high");
+
+  return {
+    summary: {
+      total_deals: deals.length,
+      high_risk_count: highRiskDeals.length,
+    },
+    high_risk_deals: highRiskDeals,
+    all_deals: allDeals,
+  };
+}
+
+async function fetchDealsForUser(
+  endUserOriginId: string,
+  externalAccountId?: string
+): Promise<Deal[]> {
+  const accountToken = await getAccountToken(endUserOriginId, externalAccountId);
   if (!accountToken) {
     throw Object.assign(
       new Error(
@@ -169,8 +268,11 @@ async function fetchMergeCollection<T extends Record<string, unknown>>(
   };
 }
 
-async function fetchUnifiedDashboardData(endUserOriginId: string): Promise<UnifiedDashboardData> {
-  const accountToken = await getAccountToken(endUserOriginId);
+async function fetchUnifiedDashboardData(
+  endUserOriginId: string,
+  externalAccountId?: string
+): Promise<UnifiedDashboardData> {
+  const accountToken = await getAccountToken(endUserOriginId, externalAccountId);
   if (!accountToken) {
     throw Object.assign(
       new Error(
@@ -180,7 +282,7 @@ async function fetchUnifiedDashboardData(endUserOriginId: string): Promise<Unifi
     );
   }
 
-  const deals = await fetchDealsForUser(endUserOriginId);
+  const deals = await fetchDealsForUser(endUserOriginId, externalAccountId);
 
   const [opportunitiesRes, contactsRes, companiesRes, engagementsRes] = await Promise.all([
     fetchMergeCollection({
@@ -285,16 +387,24 @@ async function fetchUnifiedDashboardData(endUserOriginId: string): Promise<Unifi
   };
 }
 
-analyzeRouter.post("/hubspot/unified-dashboard", async (req: Request, res: Response) => {
+analyzeRouter.post("/hubspot/unified-dashboard", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { end_user_origin_id } = req.body ?? {};
-    if (!end_user_origin_id) {
+    const authUser = (req as any).user;
+    const { end_user_origin_id, external_account_id } = req.body ?? {};
+    const resolvedOriginId = authUser?.userid ?? end_user_origin_id;
+
+    if (!resolvedOriginId) {
       return res
         .status(400)
         .json({ error: "end_user_origin_id is required" });
     }
 
-    const unified = await fetchUnifiedDashboardData(end_user_origin_id);
+    const unified = await fetchUnifiedDashboardData(
+      resolvedOriginId,
+      typeof external_account_id === "string" && external_account_id.trim()
+        ? external_account_id.trim()
+        : undefined
+    );
     return res.json({
       source: "hubspot",
       fetched_at: new Date().toISOString(),
@@ -319,35 +429,46 @@ analyzeRouter.post("/hubspot/unified-dashboard", async (req: Request, res: Respo
   }
 });
 
-analyzeRouter.post("/analyze-pipeline", async (req: Request, res: Response) => {
-  console.log("Received request to analyze pipeline");
+analyzeRouter.post("/analyze-pipeline", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { end_user_origin_id } = req.body ?? {};
-    if (!end_user_origin_id) {
-      return res
-        .status(400)
-        .json({ error: "end_user_origin_id is required" });
+    const authUser = (req as any).user;
+    const { end_user_origin_id, external_account_id } = req.body ?? {};
+    const resolvedOriginId = authUser?.userid ?? end_user_origin_id;
+    if (!resolvedOriginId) {
+      return res.status(400).json({ error: "end_user_origin_id is required" });
     }
 
-    const deals = await fetchDealsForUser(end_user_origin_id);
-
+    const deals = await fetchDealsForUser(
+      resolvedOriginId,
+      typeof external_account_id === "string" && external_account_id.trim()
+        ? external_account_id.trim()
+        : undefined
+    );
     const agentBaseUrl = process.env.AGENT_BASE_URL ?? "http://localhost:8000";
-    const agentRes = await axios.post(`${agentBaseUrl}/agent/analyze`, deals, {
-      headers: { "Content-Type": "application/json" },
-    });
-    console.log("Received response from agent:", agentRes.data);
 
-    return res.json(agentRes.data);
+    try {
+      const agentRes = await axios.post(`${agentBaseUrl}/agent/analyze`, deals, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
+      return res.json(agentRes.data);
+    } catch (agentErr: any) {
+      const fallbackEnabled = process.env.ENABLE_LOCAL_ANALYSIS_FALLBACK !== "false";
+      if (fallbackEnabled) {
+        const report = analyzeDealsLocally(deals);
+        return res.json(report);
+      }
+      throw agentErr;
+    }
   } catch (err: any) {
-    const status = err?.response?.status ?? 500;
+    const status = err?.status ?? err?.response?.status ?? 500;
     const responseData = err?.response?.data;
     const responseText = extractUpstreamError(responseData);
     const message =
       responseText ||
-      err?.response?.statusText ||
       err?.message ||
+      err?.response?.statusText ||
       `Upstream request failed (${status})`;
-    console.log("Error analyzing pipeline:", err);
     return res.status(status).json({ error: message });
   }
 });
