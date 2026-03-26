@@ -1,39 +1,57 @@
 import {
   upsertMergeAccountToken,
   getMergeAccountToken,
+  getLatestMergeAccountTokenForUser,
   revokeMergeAccountToken,
+  hasActiveMergeAccount,
 } from "../db/repositories/tokenRepository";
 
 const accountTokenByEndUserOriginId = new Map<string, string>();
 
-const USE_DB = Boolean(process.env.DATABASE_URL);
-const FALLBACK_TO_MEMORY = process.env.TOKEN_STORE_FALLBACK_MEMORY !== "false";
+function normalizeUserId(value: string): string {
+  const trimmed = String(value ?? "").trim();
+  return trimmed.startsWith("user_") ? trimmed.slice(5) : trimmed;
+}
+
+function useDb(): boolean {
+  return Boolean(process.env.DATABASE_URL);
+}
+
+function fallbackToMemory(): boolean {
+  return process.env.TOKEN_STORE_FALLBACK_MEMORY !== "false";
+}
 
 /**
  * Store account token - use DB if available, fallback to memory map
  */
 export async function setAccountToken(
-  endUserOriginId: string,
-  accountToken: string
+  userId: string,
+  accountToken: string,
+  externalAccountId?: string
 ): Promise<void> {
+  const normalizedUserId = normalizeUserId(userId);
+  const resolvedExternalAccountId = externalAccountId ?? normalizedUserId;
+  const memoryKey = `${normalizedUserId}:${resolvedExternalAccountId}`;
+
   // Always store in memory as fallback
-  accountTokenByEndUserOriginId.set(endUserOriginId, accountToken);
+  accountTokenByEndUserOriginId.set(memoryKey, accountToken);
+  accountTokenByEndUserOriginId.set(normalizedUserId, accountToken);
 
   // Try to store in database if configured
-  if (USE_DB) {
+  if (useDb()) {
     try {
-      await upsertMergeAccountToken(endUserOriginId, accountToken);
-      console.log(`✅ Token persisted for ${endUserOriginId}`);
+      await upsertMergeAccountToken(normalizedUserId, resolvedExternalAccountId, accountToken);
+      console.log(`✅ Token persisted for ${normalizedUserId}:${resolvedExternalAccountId}`);
     } catch (err) {
       console.error(
-        `⚠️  Failed to persist token for ${endUserOriginId}:`,
+        `⚠️  Failed to persist token for ${normalizedUserId}:${resolvedExternalAccountId}:`,
         err instanceof Error ? err.message : String(err)
       );
-      if (!FALLBACK_TO_MEMORY) {
+      if (!fallbackToMemory()) {
         throw err;
       }
       console.log(
-        `  Continuing with in-memory fallback (TOKEN_STORE_FALLBACK_MEMORY=${FALLBACK_TO_MEMORY})`
+        `  Continuing with in-memory fallback (TOKEN_STORE_FALLBACK_MEMORY=${fallbackToMemory()})`
       );
     }
   }
@@ -43,33 +61,42 @@ export async function setAccountToken(
  * Retrieve account token - try DB first, fallback to memory map
  */
 export async function getAccountToken(
-  endUserOriginId: string
+  userId: string,
+  externalAccountId?: string
 ): Promise<string | undefined> {
-  if (USE_DB) {
+  const normalizedUserId = normalizeUserId(userId);
+  const resolvedExternalAccountId = externalAccountId ?? null;
+
+  if (useDb()) {
     try {
-      const token = await getMergeAccountToken(endUserOriginId);
+      const token = resolvedExternalAccountId
+        ? await getMergeAccountToken(normalizedUserId, resolvedExternalAccountId)
+        : await getLatestMergeAccountTokenForUser(normalizedUserId);
       if (token) {
-        console.log(`✅ Token retrieved from DB for ${endUserOriginId}`);
+        console.log(`✅ Token retrieved from DB for ${normalizedUserId}`);
         return token;
       }
     } catch (err) {
       console.error(
-        `⚠️  Failed to retrieve token from DB for ${endUserOriginId}:`,
+        `⚠️  Failed to retrieve token from DB for ${normalizedUserId}:`,
         err instanceof Error ? err.message : String(err)
       );
-      if (!FALLBACK_TO_MEMORY) {
+      if (!fallbackToMemory()) {
         throw err;
       }
       console.log(
-        `  Falling back to in-memory store (TOKEN_STORE_FALLBACK_MEMORY=${FALLBACK_TO_MEMORY})`
+        `  Falling back to in-memory store (TOKEN_STORE_FALLBACK_MEMORY=${fallbackToMemory()})`
       );
     }
   }
 
   // Fallback to memory
-  const memoryToken = accountTokenByEndUserOriginId.get(endUserOriginId);
+  const memoryKey = resolvedExternalAccountId
+    ? `${normalizedUserId}:${resolvedExternalAccountId}`
+    : normalizedUserId;
+  const memoryToken = accountTokenByEndUserOriginId.get(memoryKey);
   if (memoryToken) {
-    console.log(`📦 Token retrieved from memory fallback for ${endUserOriginId}`);
+    console.log(`📦 Token retrieved from memory fallback for ${memoryKey}`);
   }
   return memoryToken;
 }
@@ -77,19 +104,40 @@ export async function getAccountToken(
 /**
  * Revoke a token
  */
-export async function revokeAccountToken(endUserOriginId: string): Promise<void> {
-  // Remove from memory
-  accountTokenByEndUserOriginId.delete(endUserOriginId);
+export async function revokeAccountToken(
+  userId: string,
+  externalAccountId?: string
+): Promise<void> {
+  const normalizedUserId = normalizeUserId(userId);
+  const resolvedExternalAccountId = externalAccountId ?? normalizedUserId;
+  const memoryKey = `${normalizedUserId}:${resolvedExternalAccountId}`;
 
-  if (USE_DB) {
+  // Remove from memory
+  accountTokenByEndUserOriginId.delete(memoryKey);
+
+  if (useDb()) {
     try {
-      await revokeMergeAccountToken(endUserOriginId, "Manual revocation");
-      console.log(`✅ Token revoked for ${endUserOriginId}`);
+      await revokeMergeAccountToken(normalizedUserId, resolvedExternalAccountId, "Manual revocation");
+      console.log(`✅ Token revoked for ${normalizedUserId}:${resolvedExternalAccountId}`);
     } catch (err) {
       console.error(
-        `⚠️  Failed to revoke token for ${endUserOriginId}:`,
+        `⚠️  Failed to revoke token for ${normalizedUserId}:${resolvedExternalAccountId}:`,
         err instanceof Error ? err.message : String(err)
       );
     }
   }
+}
+
+export async function hasAccountToken(endUserOriginId: string): Promise<boolean> {
+  const normalizedUserId = normalizeUserId(endUserOriginId);
+  if (useDb()) {
+    try {
+      return await hasActiveMergeAccount(normalizedUserId);
+    } catch (err) {
+      if (!fallbackToMemory()) {
+        throw err;
+      }
+    }
+  }
+  return accountTokenByEndUserOriginId.has(normalizedUserId);
 }
