@@ -2,6 +2,7 @@ import axios from "axios";
 import type { Request, Response } from "express";
 import { Router } from "express";
 import { getAccountToken, setAccountToken } from "../store/accountTokens";
+import { requireAuth } from "./auth";
 
 export const mergeRouter = Router();
 
@@ -42,22 +43,23 @@ function extractUpstreamError(responseData: unknown): string {
   return "";
 }
 
-mergeRouter.post("/link-token", async (req: Request, res: Response) => {
+mergeRouter.post("/link-token", requireAuth, async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.MERGE_API_KEY;
     if (!apiKey)
       return res.status(500).json({ error: "MERGE_API_KEY not set" });
 
-    const {
-      end_user_origin_id,
-      end_user_organization_name,
-      end_user_email_address,
-    } = req.body ?? {};
+    const { end_user_organization_name, end_user_email_address } = req.body ?? {};
 
+    const authUserid = (req as any).user?.userid as string | undefined;
+    const bodyOriginId = (req.body as any)?.end_user_origin_id as string | undefined;
+    const end_user_origin_id = authUserid ?? bodyOriginId;
     if (!end_user_origin_id) {
-      return res
-        .status(400)
-        .json({ error: "end_user_origin_id is required" });
+      return res.status(400).json({ error: "end_user_origin_id is required" });
+    }
+
+    if (authUserid && bodyOriginId && bodyOriginId !== authUserid) {
+      return res.status(403).json({ error: "end_user_origin_id does not match authenticated user" });
     }
 
     const payload = {
@@ -87,20 +89,26 @@ mergeRouter.post("/link-token", async (req: Request, res: Response) => {
   }
 });
 
-mergeRouter.post("/account-token", async (req: Request, res: Response) => {
+mergeRouter.post("/account-token", requireAuth, async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.MERGE_API_KEY;
     if (!apiKey)
       return res.status(500).json({ error: "MERGE_API_KEY not set" });
 
-    const { public_token, end_user_origin_id } = req.body ?? {};
+    const { public_token } = req.body ?? {};
+    const authUserid = (req as any).user?.userid as string | undefined;
+    const bodyOriginId = (req.body as any)?.end_user_origin_id as string | undefined;
+    const end_user_origin_id = authUserid ?? bodyOriginId;
     if (!public_token) {
       return res.status(400).json({ error: "public_token is required" });
     }
+
     if (!end_user_origin_id) {
-      return res
-        .status(400)
-        .json({ error: "end_user_origin_id is required" });
+      return res.status(400).json({ error: "end_user_origin_id is required" });
+    }
+
+    if (authUserid && bodyOriginId && bodyOriginId !== authUserid) {
+      return res.status(403).json({ error: "end_user_origin_id does not match authenticated user" });
     }
 
     const accountTokenRes = await axios.get(
@@ -133,12 +141,16 @@ mergeRouter.post("/account-token", async (req: Request, res: Response) => {
   }
 });
 
-mergeRouter.get("/account-token", async (req: Request, res: Response) => {
-  const endUserOriginId = String(req.query.end_user_origin_id ?? "");
+mergeRouter.get("/account-token", requireAuth, async (req: Request, res: Response) => {
+  const authUserid = (req as any).user?.userid as string | undefined;
+  const queryOriginId = String(req.query.end_user_origin_id ?? "");
+  const endUserOriginId = authUserid ?? queryOriginId;
   if (!endUserOriginId) {
-    return res
-      .status(400)
-      .json({ error: "end_user_origin_id query param is required" });
+    return res.status(400).json({ error: "end_user_origin_id query param is required" });
+  }
+
+  if (authUserid && queryOriginId && queryOriginId !== authUserid) {
+    return res.status(403).json({ error: "end_user_origin_id does not match authenticated user" });
   }
 
   try {

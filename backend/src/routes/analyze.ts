@@ -5,6 +5,7 @@ import { CrmManager } from "../crm/CrmManager";
 import { MergeProvider } from "../crm/providers/MergeProvider";
 import type { Deal } from "../contracts/deal";
 import { getAccountToken } from "../store/accountTokens";
+import { requireAuth } from "./auth";
 
 export const analyzeRouter = Router();
 
@@ -285,13 +286,17 @@ async function fetchUnifiedDashboardData(endUserOriginId: string): Promise<Unifi
   };
 }
 
-analyzeRouter.post("/hubspot/unified-dashboard", async (req: Request, res: Response) => {
+analyzeRouter.post("/hubspot/unified-dashboard", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { end_user_origin_id } = req.body ?? {};
+    const authUserid = (req as any).user?.userid as string | undefined;
+    const bodyOriginId = (req.body as any)?.end_user_origin_id as string | undefined;
+    const end_user_origin_id = authUserid ?? bodyOriginId;
     if (!end_user_origin_id) {
-      return res
-        .status(400)
-        .json({ error: "end_user_origin_id is required" });
+      return res.status(400).json({ error: "end_user_origin_id is required" });
+    }
+
+    if (authUserid && bodyOriginId && bodyOriginId !== authUserid) {
+      return res.status(403).json({ error: "end_user_origin_id does not match authenticated user" });
     }
 
     const unified = await fetchUnifiedDashboardData(end_user_origin_id);
@@ -319,14 +324,18 @@ analyzeRouter.post("/hubspot/unified-dashboard", async (req: Request, res: Respo
   }
 });
 
-analyzeRouter.post("/analyze-pipeline", async (req: Request, res: Response) => {
+analyzeRouter.post("/analyze-pipeline", requireAuth, async (req: Request, res: Response) => {
   console.log("Received request to analyze pipeline");
   try {
-    const { end_user_origin_id } = req.body ?? {};
+    const authUserid = (req as any).user?.userid as string | undefined;
+    const bodyOriginId = (req.body as any)?.end_user_origin_id as string | undefined;
+    const end_user_origin_id = authUserid ?? bodyOriginId;
     if (!end_user_origin_id) {
-      return res
-        .status(400)
-        .json({ error: "end_user_origin_id is required" });
+      return res.status(400).json({ error: "end_user_origin_id is required" });
+    }
+
+    if (authUserid && bodyOriginId && bodyOriginId !== authUserid) {
+      return res.status(403).json({ error: "end_user_origin_id does not match authenticated user" });
     }
 
     const deals = await fetchDealsForUser(end_user_origin_id);

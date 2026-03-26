@@ -6,8 +6,13 @@ import {
 
 const accountTokenByEndUserOriginId = new Map<string, string>();
 
-const USE_DB = Boolean(process.env.DATABASE_URL);
-const FALLBACK_TO_MEMORY = process.env.TOKEN_STORE_FALLBACK_MEMORY !== "false";
+function useDb(): boolean {
+  return Boolean(process.env.DATABASE_URL);
+}
+
+function fallbackToMemory(): boolean {
+  return process.env.TOKEN_STORE_FALLBACK_MEMORY !== "false";
+}
 
 /**
  * Store account token - use DB if available, fallback to memory map
@@ -20,20 +25,24 @@ export async function setAccountToken(
   accountTokenByEndUserOriginId.set(endUserOriginId, accountToken);
 
   // Try to store in database if configured
-  if (USE_DB) {
+  if (useDb()) {
     try {
-      await upsertMergeAccountToken(endUserOriginId, accountToken);
+      await upsertMergeAccountToken({
+        userid: endUserOriginId,
+        externalAccountId: endUserOriginId,
+        plainToken: accountToken,
+      });
       console.log(`✅ Token persisted for ${endUserOriginId}`);
     } catch (err) {
       console.error(
         `⚠️  Failed to persist token for ${endUserOriginId}:`,
         err instanceof Error ? err.message : String(err)
       );
-      if (!FALLBACK_TO_MEMORY) {
+      if (!fallbackToMemory()) {
         throw err;
       }
       console.log(
-        `  Continuing with in-memory fallback (TOKEN_STORE_FALLBACK_MEMORY=${FALLBACK_TO_MEMORY})`
+        `  Continuing with in-memory fallback (TOKEN_STORE_FALLBACK_MEMORY=${fallbackToMemory()})`
       );
     }
   }
@@ -45,9 +54,12 @@ export async function setAccountToken(
 export async function getAccountToken(
   endUserOriginId: string
 ): Promise<string | undefined> {
-  if (USE_DB) {
+  if (useDb()) {
     try {
-      const token = await getMergeAccountToken(endUserOriginId);
+      const token = await getMergeAccountToken({
+        userid: endUserOriginId,
+        externalAccountId: endUserOriginId,
+      });
       if (token) {
         console.log(`✅ Token retrieved from DB for ${endUserOriginId}`);
         return token;
@@ -57,11 +69,11 @@ export async function getAccountToken(
         `⚠️  Failed to retrieve token from DB for ${endUserOriginId}:`,
         err instanceof Error ? err.message : String(err)
       );
-      if (!FALLBACK_TO_MEMORY) {
+      if (!fallbackToMemory()) {
         throw err;
       }
       console.log(
-        `  Falling back to in-memory store (TOKEN_STORE_FALLBACK_MEMORY=${FALLBACK_TO_MEMORY})`
+        `  Falling back to in-memory store (TOKEN_STORE_FALLBACK_MEMORY=${fallbackToMemory()})`
       );
     }
   }
@@ -81,9 +93,13 @@ export async function revokeAccountToken(endUserOriginId: string): Promise<void>
   // Remove from memory
   accountTokenByEndUserOriginId.delete(endUserOriginId);
 
-  if (USE_DB) {
+  if (useDb()) {
     try {
-      await revokeMergeAccountToken(endUserOriginId, "Manual revocation");
+      await revokeMergeAccountToken({
+        userid: endUserOriginId,
+        externalAccountId: endUserOriginId,
+        reason: "Manual revocation",
+      });
       console.log(`✅ Token revoked for ${endUserOriginId}`);
     } catch (err) {
       console.error(

@@ -33,34 +33,23 @@ interface TokenAuditLog {
 
 const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY;
 if (!ENCRYPTION_KEY) {
-  console.warn(
-    "⚠️  TOKEN_ENCRYPTION_KEY not set. Tokens will not be encrypted."
-  );
+  console.warn("⚠️  TOKEN_ENCRYPTION_KEY not set. Tokens will not be encrypted.");
 }
 
 /**
  * Create or update a Merge account token
  */
-export async function upsertMergeAccountToken(
-  externalAccountId: string,
-  plainToken: string,
-  accountName?: string
-): Promise<MergeAccount> {
+export async function upsertMergeAccountToken(params: {
+  userid: string;
+  externalAccountId: string;
+  plainToken: string;
+  accountName?: string;
+}): Promise<MergeAccount> {
   try {
-    // Create user entry if needed (using externalAccountId as temp userid)
-    const fakeUserid = `user_${externalAccountId}`;
-    
-    await query(
-      `INSERT INTO users (userid, username, org_name, email)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (userid) DO NOTHING`,
-      [fakeUserid, `user_${externalAccountId}`, null, null]
-    );
-
     // Encrypt token
     const encryptedToken = ENCRYPTION_KEY
-      ? encryptToken(plainToken, ENCRYPTION_KEY)
-      : plainToken;
+      ? encryptToken(params.plainToken, ENCRYPTION_KEY)
+      : params.plainToken;
 
     // Upsert account
     const accountId = crypto.randomUUID();
@@ -75,11 +64,11 @@ export async function upsertMergeAccountToken(
        RETURNING *`,
       [
         accountId,
-        fakeUserid,
+        params.userid,
         encryptedToken,
         1, // key_version
-        accountName || null,
-        externalAccountId,
+        params.accountName || null,
+        params.externalAccountId,
         "active",
       ]
     );
@@ -89,20 +78,28 @@ export async function upsertMergeAccountToken(
     }
 
     // Log audit
-    await logTokenEvent("token_created", "merge", result.id, externalAccountId, {
-      account_name: accountName,
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_created",
+      provider: "merge",
+      accountId: result.id,
+      externalAccountId: params.externalAccountId,
+      actionDetails: {
+        account_name: params.accountName,
+      },
     });
 
     return result;
   } catch (err) {
-    await logTokenEvent(
-      "token_error",
-      "merge",
-      null,
-      externalAccountId,
-      null,
-      err instanceof Error ? err.message : String(err)
-    );
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_error",
+      provider: "merge",
+      accountId: null,
+      externalAccountId: params.externalAccountId,
+      actionDetails: null,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }
@@ -110,13 +107,14 @@ export async function upsertMergeAccountToken(
 /**
  * Retrieve a Merge account token by external ID
  */
-export async function getMergeAccountToken(
-  externalAccountId: string
-): Promise<string | null> {
+export async function getMergeAccountToken(params: {
+  userid: string;
+  externalAccountId: string;
+}): Promise<string | null> {
   try {
     const account = await queryOne<MergeAccount>(
-      `SELECT * FROM merge_accounts WHERE external_account_id = $1 AND status = 'active'`,
-      [externalAccountId]
+      `SELECT * FROM merge_accounts WHERE userid = $1 AND external_account_id = $2 AND status = 'active'`,
+      [params.userid, params.externalAccountId]
     );
 
     if (!account) {
@@ -135,18 +133,25 @@ export async function getMergeAccountToken(
       : account.token_ciphertext;
 
     // Log audit
-    await logTokenEvent("token_used", "merge", account.id, externalAccountId);
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_used",
+      provider: "merge",
+      accountId: account.id,
+      externalAccountId: params.externalAccountId,
+    });
 
     return decryptedToken;
   } catch (err) {
-    await logTokenEvent(
-      "token_error",
-      "merge",
-      null,
-      externalAccountId,
-      null,
-      err instanceof Error ? err.message : String(err)
-    );
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_error",
+      provider: "merge",
+      accountId: null,
+      externalAccountId: params.externalAccountId,
+      actionDetails: null,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }
@@ -154,15 +159,16 @@ export async function getMergeAccountToken(
 /**
  * Revoke a Merge account token
  */
-export async function revokeMergeAccountToken(
-  externalAccountId: string,
-  reason?: string
-): Promise<void> {
+export async function revokeMergeAccountToken(params: {
+  userid: string;
+  externalAccountId: string;
+  reason?: string;
+}): Promise<void> {
   try {
     const result = await query(
       `UPDATE merge_accounts SET status = 'revoked', updated_at = NOW() 
-       WHERE external_account_id = $1 RETURNING id`,
-      [externalAccountId]
+       WHERE userid = $1 AND external_account_id = $2 RETURNING id`,
+      [params.userid, params.externalAccountId]
     );
 
     if (result.rowCount === 0) {
@@ -170,22 +176,24 @@ export async function revokeMergeAccountToken(
     }
 
     const accountId = result.rows[0]?.id;
-    await logTokenEvent(
-      "token_revoked",
-      "merge",
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_revoked",
+      provider: "merge",
       accountId,
-      externalAccountId,
-      { reason }
-    );
+      externalAccountId: params.externalAccountId,
+      actionDetails: { reason: params.reason },
+    });
   } catch (err) {
-    await logTokenEvent(
-      "token_error",
-      "merge",
-      null,
-      externalAccountId,
-      null,
-      err instanceof Error ? err.message : String(err)
-    );
+    await logTokenEvent({
+      userid: params.userid,
+      event_type: "token_error",
+      provider: "merge",
+      accountId: null,
+      externalAccountId: params.externalAccountId,
+      actionDetails: null,
+      errorMessage: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }
@@ -204,35 +212,33 @@ export async function getUserMergeAccounts(userid: string): Promise<MergeAccount
 /**
  * Log a token event to audit trail
  */
-export async function logTokenEvent(
-  event_type: string,
-  provider: string,
-  accountId: string | null,
-  externalAccountId: string | null,
-  actionDetails?: any,
-  errorMessage?: string,
-  ipAddress?: string,
-  userAgent?: string
-): Promise<void> {
+export async function logTokenEvent(params: {
+  userid: string;
+  event_type: string;
+  provider: string;
+  accountId: string | null;
+  externalAccountId: string | null;
+  actionDetails?: any;
+  errorMessage?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}): Promise<void> {
   try {
-    // Use a placeholder userid for now; in production, this would come from auth context
-    const userid = `user_${externalAccountId || "unknown"}`;
-    
     await query(
       `INSERT INTO token_audit_logs 
         (log_id, userid, event_type, provider, account_id, external_account_id, action_details, error_message, ip_address, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         crypto.randomUUID(),
-        userid,
-        event_type,
-        provider,
-        accountId,
-        externalAccountId,
-        JSON.stringify(actionDetails || {}),
-        errorMessage || null,
-        ipAddress || null,
-        userAgent || null,
+        params.userid,
+        params.event_type,
+        params.provider,
+        params.accountId,
+        params.externalAccountId,
+        JSON.stringify(params.actionDetails || {}),
+        params.errorMessage || null,
+        params.ipAddress || null,
+        params.userAgent || null,
       ]
     );
   } catch (err) {

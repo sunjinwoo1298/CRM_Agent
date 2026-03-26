@@ -143,16 +143,23 @@ interface JWTPayload {
   exp?: number;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = 24 * 60 * 60; // 24 hours in seconds
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !secret.trim()) {
+    throw new Error(
+      "JWT_SECRET environment variable not set. Ensure backend/.env exists and you start the server from the backend folder (or set JWT_SECRET in the environment)."
+    );
+  }
+  return secret;
+}
 
 /**
  * Create a signed JWT token
  */
 export function createJWT(payload: JWTPayload): string {
-  if (!JWT_SECRET) {
-    throw new Error("JWT_SECRET environment variable not set");
-  }
+  const JWT_SECRET = getJwtSecret();
 
   const now = Math.floor(Date.now() / 1000);
   const tokenPayload = {
@@ -178,9 +185,7 @@ export function createJWT(payload: JWTPayload): string {
  */
 export function verifyJWT(token: string): JWTPayload | null {
   try {
-    if (!JWT_SECRET) {
-      throw new Error("JWT_SECRET environment variable not set");
-    }
+    const JWT_SECRET = getJwtSecret();
 
     const [headerB64, bodyB64, signatureB64] = token.split(".");
     if (!headerB64 || !bodyB64 || !signatureB64) {
