@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -65,6 +65,38 @@ export default function AnalyticsDashboard({
   const [selectedPeriod, setSelectedPeriod] = useState<string>("7d");
   const [isExporting, setIsExporting] = useState(false);
 
+  const periodLabel = useMemo(() => {
+    const map: Record<string, string> = {
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days",
+      "90d": "Last 90 Days",
+      ytd: "Year To Date",
+    };
+    return map[selectedPeriod] ?? selectedPeriod.toUpperCase();
+  }, [selectedPeriod]);
+
+  const topCompany = useMemo(() => {
+    const rows = data?.engagement_by_company ?? [];
+    return rows.reduce<{ company: string; score: number } | null>((best, row) => {
+      const score = row.opens + row.clicks;
+      if (!best || score > best.score) {
+        return { company: row.company, score };
+      }
+      return best;
+    }, null);
+  }, [data?.engagement_by_company]);
+
+  const topTitle = useMemo(() => {
+    const rows = data?.engagement_by_title ?? [];
+    return rows.reduce<{ title: string; score: number } | null>((best, row) => {
+      const score = row.opens + row.clicks + row.replies;
+      if (!best || score > best.score) {
+        return { title: row.title, score };
+      }
+      return best;
+    }, null);
+  }, [data?.engagement_by_title]);
+
   const handlePeriodChange = async (period: string) => {
     setSelectedPeriod(period);
     if (onFilterChange) {
@@ -100,299 +132,248 @@ export default function AnalyticsDashboard({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
-          <p className="text-gray-600 text-sm mt-1">
-            Campaign performance and engagement metrics
-          </p>
-        </div>
+    <div className="grid gap-5 xl:grid-cols-[300px_1fr]">
+      <aside className="xl:sticky xl:top-6 xl:self-start">
+        <div className="ds-panel p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Analytics</h2>
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="ds-btn ds-btn-primary !px-3 !py-1.5 !text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {isExporting ? "Exporting" : "Export"}
+            </button>
+          </div>
+          <p className="mt-1 text-sm text-slate-600">Editorial insight rail with compact trend context.</p>
 
-        <div className="flex items-center gap-2">
-          {/* Period Selector */}
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-1">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { label: "7D", value: "7d" },
+                { label: "30D", value: "30d" },
+                { label: "90D", value: "90d" },
+                { label: "YTD", value: "ytd" },
+              ].map((period) => (
+                <button
+                  key={period.value}
+                  onClick={() => handlePeriodChange(period.value)}
+                  className={`ds-btn !rounded-md !px-2 !py-1 !text-xs ${
+                    selectedPeriod === period.value
+                      ? "ds-btn-primary"
+                      : "ds-btn-secondary"
+                  }`}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Window</p>
+              <p className="mt-1 text-sm font-medium text-slate-800">{periodLabel}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Top Company</p>
+              <p className="mt-1 text-sm font-medium text-slate-800">{topCompany?.company ?? "-"}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Top Job Title</p>
+              <p className="mt-1 text-sm font-medium text-slate-800">{topTitle?.title ?? "-"}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
             {[
-              { label: "7D", value: "7d" },
-              { label: "30D", value: "30d" },
-              { label: "90D", value: "90d" },
-              { label: "YTD", value: "ytd" },
-            ].map((period) => (
-              <button
-                key={period.value}
-                onClick={() => handlePeriodChange(period.value)}
-                className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
-                  selectedPeriod === period.value
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {period.label}
-              </button>
-            ))}
+              { label: "Open Rate", value: data.open_rate, color: "bg-emerald-600/70" },
+              { label: "Click Rate", value: data.click_rate, color: "bg-cyan-700/70" },
+              { label: "Reply Rate", value: data.reply_rate, color: "bg-sky-700/70" },
+            ].map((metric) => {
+              const width = Math.max(8, Math.min(100, metric.value * 100));
+              return (
+                <div key={metric.label}>
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span>{metric.label}</span>
+                    <span>{(metric.value * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className={`h-full rounded-full ${metric.color} transition-all duration-500`}
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </aside>
+
+      <section className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="pipeline-subtle-tile ds-panel rounded-xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-600">Emails Sent</h3>
+              <Mail className="h-4 w-4 text-cyan-700" />
+            </div>
+            <p className="text-2xl font-semibold text-slate-900">{data.total_emails_sent}</p>
           </div>
 
-          {/* Export Button */}
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {isExporting ? "Exporting..." : "Export"}
-          </button>
-        </div>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Emails Sent */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-gray-600 font-semibold">Emails Sent</h3>
-            <Mail className="w-4 h-4 text-blue-600" />
+          <div className="pipeline-subtle-tile ds-panel rounded-xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-600">Open Rate</h3>
+              <Eye className="h-4 w-4 text-emerald-700" />
+            </div>
+            <p className="text-2xl font-semibold text-slate-900">{(data.open_rate * 100).toFixed(1)}%</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {data.total_emails_sent}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {(data.total_emails_sent / 7).toFixed(0)}/week avg
-          </p>
-        </div>
 
-        {/* Open Rate */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-gray-600 font-semibold">Open Rate</h3>
-            <Eye className="w-4 h-4 text-green-600" />
+          <div className="pipeline-subtle-tile ds-panel rounded-xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-600">Click Rate</h3>
+              <Link2 className="h-4 w-4 text-cyan-700" />
+            </div>
+            <p className="text-2xl font-semibold text-slate-900">{(data.click_rate * 100).toFixed(1)}%</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {(data.open_rate * 100).toFixed(1)}%
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {data.total_opens} opens
-          </p>
-        </div>
 
-        {/* Click Rate */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-gray-600 font-semibold">Click Rate</h3>
-            <Link2 className="w-4 h-4 text-purple-600" />
+          <div className="pipeline-subtle-tile ds-panel rounded-xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-600">Reply Rate</h3>
+              <MessageCircle className="h-4 w-4 text-sky-700" />
+            </div>
+            <p className="text-2xl font-semibold text-slate-900">{(data.reply_rate * 100).toFixed(1)}%</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {(data.click_rate * 100).toFixed(1)}%
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {data.total_clicks} clicks
-          </p>
-        </div>
 
-        {/* Reply Rate */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-gray-600 font-semibold">Reply Rate</h3>
-            <MessageCircle className="w-4 h-4 text-orange-600" />
+          <div className="pipeline-subtle-tile ds-panel rounded-xl p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-600">Trend</h3>
+              <TrendingUp className="h-4 w-4 text-indigo-700" />
+            </div>
+            <p className="text-2xl font-semibold text-slate-900">
+              +{(((data.open_rate + data.click_rate + data.reply_rate) / 3) * 100).toFixed(0)}%
+            </p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {(data.reply_rate * 100).toFixed(1)}%
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            {data.total_replies} replies
-          </p>
         </div>
 
-        {/* Trend */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm text-gray-600 font-semibold">Trend</h3>
-            <TrendingUp className="w-4 h-4 text-indigo-600" />
-          </div>
-          <p className="text-2xl font-bold text-gray-900">
-            +{((data.open_rate + data.click_rate + data.reply_rate) / 3 * 100).toFixed(0)}%
-          </p>
-          <p className="text-xs text-gray-500 mt-1">vs last period</p>
-        </div>
-      </div>
-
-      {/* Engagement Trend */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Engagement Trend</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data.trending_data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="date" stroke="#6b7280" />
-            <YAxis stroke="#6b7280" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #e5e7eb",
-                borderRadius: "0.5rem",
-              }}
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="opens"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={{ fill: "#3b82f6", r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="clicks"
-              stroke="#10b981"
-              strokeWidth={2}
-              dot={{ fill: "#10b981", r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="replies"
-              stroke="#f59e0b"
-              strokeWidth={2}
-              dot={{ fill: "#f59e0b", r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Engagement by Company */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">
-            Engagement by Company
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.engagement_by_company}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="company" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
+        <div className="ds-panel p-5">
+          <h3 className="mb-3 text-base font-semibold text-slate-900">Engagement Trend</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={data.trending_data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="date" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#ffffff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.5rem",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "0.75rem",
                 }}
               />
               <Legend />
-              <Bar dataKey="opens" fill="#3b82f6" />
-              <Bar dataKey="clicks" fill="#10b981" />
-            </BarChart>
+              <Line type="monotone" dataKey="opens" stroke="#0891b2" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="clicks" stroke="#0f766e" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="replies" stroke="#0369a1" strokeWidth={2} dot={false} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Engagement by Title */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">
-            Engagement by Job Title
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.engagement_by_title} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis type="number" stroke="#6b7280" />
-              <YAxis dataKey="title" type="category" stroke="#6b7280" width={100} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#ffffff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.5rem",
-                }}
-              />
-              <Legend />
-              <Bar dataKey="opens" fill="#3b82f6" />
-              <Bar dataKey="clicks" fill="#10b981" />
-              <Bar dataKey="replies" fill="#f59e0b" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="ds-panel p-5">
+            <h3 className="mb-3 text-base font-semibold text-slate-900">Engagement by Company</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data.engagement_by_company}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="company" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "0.75rem",
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="opens" fill="#0891b2" />
+                <Bar dataKey="clicks" fill="#0f766e" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-      {/* Detailed Statistics Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="border-b border-gray-200 px-6 py-4 bg-gray-50">
-          <h3 className="font-semibold text-gray-900">Detailed Statistics</h3>
+          <div className="ds-panel p-5">
+            <h3 className="mb-3 text-base font-semibold text-slate-900">Engagement by Job Title</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data.engagement_by_title} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis type="number" stroke="#64748b" />
+                <YAxis dataKey="title" type="category" stroke="#64748b" width={100} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "0.75rem",
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="opens" fill="#0891b2" />
+                <Bar dataKey="clicks" fill="#0f766e" />
+                <Bar dataKey="replies" fill="#0369a1" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                  Metric
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">
-                  Value
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">
-                  Change
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 text-sm text-gray-900">Total Emails Sent</td>
-                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">
-                  {data.total_emails_sent}
-                </td>
-                <td className="px-6 py-4 text-sm text-right text-green-600">
-                  +12%
-                </td>
-                <td className="px-6 py-4 text-sm text-right">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                    Good
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 text-sm text-gray-900">Total Opens</td>
-                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">
-                  {data.total_opens}
-                </td>
-                <td className="px-6 py-4 text-sm text-right text-green-600">
-                  +8%
-                </td>
-                <td className="px-6 py-4 text-sm text-right">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                    Good
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 text-sm text-gray-900">Total Clicks</td>
-                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">
-                  {data.total_clicks}
-                </td>
-                <td className="px-6 py-4 text-sm text-right text-green-600">
-                  +15%
-                </td>
-                <td className="px-6 py-4 text-sm text-right">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                    Excellent
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 text-sm text-gray-900">Total Replies</td>
-                <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">
-                  {data.total_replies}
-                </td>
-                <td className="px-6 py-4 text-sm text-right text-green-600">
-                  +22%
-                </td>
-                <td className="px-6 py-4 text-sm text-right">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold">
-                    Excellent
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+
+        <div className="ds-panel p-5">
+          <h3 className="mb-3 text-base font-semibold text-slate-900">Detailed Statistics</h3>
+          <div className="max-h-[320px] overflow-auto rounded-xl border border-slate-200">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-sm">
+                <tr className="border-b border-slate-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700">Metric</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700">Value</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700">Change</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                <tr className="transition-colors hover:bg-slate-50/90">
+                  <td className="px-4 py-3 text-sm text-slate-900">Total Emails Sent</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{data.total_emails_sent}</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">+12%</td>
+                  <td className="px-4 py-3 text-right text-sm">
+                    <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Good</span>
+                  </td>
+                </tr>
+                <tr className="transition-colors hover:bg-slate-50/90">
+                  <td className="px-4 py-3 text-sm text-slate-900">Total Opens</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{data.total_opens}</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">+8%</td>
+                  <td className="px-4 py-3 text-right text-sm">
+                    <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Good</span>
+                  </td>
+                </tr>
+                <tr className="transition-colors hover:bg-slate-50/90">
+                  <td className="px-4 py-3 text-sm text-slate-900">Total Clicks</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{data.total_clicks}</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">+15%</td>
+                  <td className="px-4 py-3 text-right text-sm">
+                    <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Excellent</span>
+                  </td>
+                </tr>
+                <tr className="transition-colors hover:bg-slate-50/90">
+                  <td className="px-4 py-3 text-sm text-slate-900">Total Replies</td>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{data.total_replies}</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">+22%</td>
+                  <td className="px-4 py-3 text-right text-sm">
+                    <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">Excellent</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

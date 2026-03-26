@@ -297,7 +297,7 @@ export function ProspectingChatDock({ userId, leadContext = {} }: Props) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg"
+        className="ds-btn ds-btn-dark ds-btn-pill fixed bottom-5 right-5 z-40 shadow-lg"
       >
         Open Copilot
       </button>
@@ -318,19 +318,19 @@ export function ProspectingChatDock({ userId, leadContext = {} }: Props) {
         <div className="flex gap-2">
           <button
             onClick={() => setWide((w) => !w)}
-            className="rounded-md bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+            className="ds-btn ds-btn-secondary !rounded-md !px-2 !py-1 !text-xs"
           >
             {wide ? "Compact" : "Wide"}
           </button>
           <button
             onClick={() => setShowResults((s) => !s)}
-            className="rounded-md bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+            className="ds-btn ds-btn-secondary !rounded-md !px-2 !py-1 !text-xs"
           >
             {showResults ? "Hide Results" : "Show Results"}
           </button>
           <button
             onClick={() => setOpen(false)}
-            className="rounded-md bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+            className="ds-btn ds-btn-secondary !rounded-md !px-2 !py-1 !text-xs"
           >
             Close
           </button>
@@ -373,7 +373,7 @@ export function ProspectingChatDock({ userId, leadContext = {} }: Props) {
           <button
             onClick={runFullFlow}
             disabled={loading}
-            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+            className="ds-btn ds-btn-primary !px-3 !py-2 !text-xs"
           >
             Run Full Agent Flow
           </button>
@@ -388,12 +388,12 @@ export function ProspectingChatDock({ userId, leadContext = {} }: Props) {
               }
             }}
             placeholder="Ask for lead research or sequence rewrite..."
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-indigo-400 focus:ring"
+            className="ds-input flex-1"
           />
           <button
             onClick={sendMessage}
             disabled={loading}
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+            className="ds-btn ds-btn-primary !px-3 !py-2 !text-sm"
           >
             Send
           </button>
