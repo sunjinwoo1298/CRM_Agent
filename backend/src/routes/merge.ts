@@ -121,6 +121,20 @@ mergeRouter.post("/account-token", requireAuth, async (req: Request, res: Respon
       return res.status(502).json({ error: "Merge did not return account_token" });
     }
 
+    // Quick verification: call a lightweight Merge endpoint using the returned account_token
+    try {
+      await axios.get("https://api.merge.dev/api/crm/v1/opportunities", {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "X-Account-Token": account_token,
+        },
+        timeout: 5000,
+      });
+    } catch (verifyErr: any) {
+      const msg = extractUpstreamError(verifyErr?.response?.data) || verifyErr?.message || "Invalid account_token";
+      return res.status(400).json({ error: `Account token verification failed: ${msg}` });
+    }
+
     // Save to database
     await setAccountToken(userId, account_token, resolvedOriginId);
 
