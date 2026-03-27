@@ -1,4 +1,5 @@
 import axios from "axios";
+import mergeClient from "../mergeClient";
 import type { Deal } from "../../contracts/deal";
 import type { CrmProvider } from "../CrmProvider";
 
@@ -35,7 +36,7 @@ export class MergeProvider implements CrmProvider {
 
     for (const url of endpoints) {
       try {
-        res = await axios.get<MergeListResponse<MergeDeal>>(url, { headers });
+        res = await mergeClient.get<MergeListResponse<MergeDeal>>(url, { headers });
         break;
       } catch (err: any) {
         if (err?.response?.status !== 404) {

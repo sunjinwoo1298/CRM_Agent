@@ -109,10 +109,9 @@ mergeRouter.post("/account-token", requireAuth, async (req: Request, res: Respon
       return res.status(403).json({ error: "Unauthorized: origin_id mismatch" });
     }
 
-    // FIX: Merge uses POST for account token exchange, not GET
-    const accountTokenRes = await axios.post(
+    // Merge expects a GET for account-token exchange (POST returns 405)
+    const accountTokenRes = await axios.get(
       `https://api.merge.dev/api/integrations/account-token/${public_token}`,
-      {}, // Empty body
       { headers: { Authorization: `Bearer ${apiKey}` } }
     );
 
@@ -123,7 +122,8 @@ mergeRouter.post("/account-token", requireAuth, async (req: Request, res: Respon
 
     // Quick verification: call a lightweight Merge endpoint using the returned account_token
     try {
-      await axios.get("https://api.merge.dev/api/crm/v1/opportunities", {
+      // Verify by fetching a lightweight CRM endpoint using safe client
+      await (await import("../crm/mergeClient")).default.get("https://api.merge.dev/api/crm/v1/opportunities", {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "X-Account-Token": account_token,

@@ -1,4 +1,5 @@
 import axios from "axios";
+import mergeClient from "../crm/mergeClient";
 import type { Request, Response } from "express";
 import { Router } from "express";
 import { CrmManager } from "../crm/CrmManager";
@@ -247,7 +248,7 @@ async function fetchMergeCollection<T extends Record<string, unknown>>(
   let lastNotFound = false;
   for (const endpoint of params.endpoints) {
     try {
-      const res = await axios.get<MergeListResponse<T>>(endpoint, { headers });
+      const res = await mergeClient.get<MergeListResponse<T>>(endpoint, { headers });
       const items = (res.data.results ?? []).map((raw) => params.mapRecord(raw));
       return { items };
     } catch (err: any) {
@@ -429,7 +430,7 @@ async function fetchMergeOpportunityDetail(params: {
 
   for (const endpoint of endpoints) {
     try {
-      const res = await axios.get<MergeOpportunity>(endpoint, { headers, timeout: 15000 });
+      const res = await mergeClient.get<MergeOpportunity>(endpoint, { headers, timeout: 15000 });
       if (res.data && typeof res.data === "object") {
         return res.data;
       }
@@ -463,7 +464,7 @@ async function fetchMergeEngagements(params: {
 
   for (const endpoint of endpoints) {
     try {
-      const res = await axios.get<MergeListResponse<MergeEngagement>>(endpoint, {
+      const res = await mergeClient.get<MergeListResponse<MergeEngagement>>(endpoint, {
         headers,
         timeout: 20000,
       });
