@@ -6,6 +6,7 @@ import { mergeRouter } from "./routes/merge";
 import { authRouter } from "./routes/auth";
 import { prospectingRouter } from "./routes/prospecting";
 import { retentionRouter } from "./routes/retention";
+import { dealIntelligenceRouter } from "./routes/dealIntelligence";
 import webhookRouter from "./routes/webhooks";
 import approvalRouter from "./routes/approvals";
 import { initializePool, checkDatabaseConnection } from "./db/connection";
@@ -27,6 +28,7 @@ app.use("/api/merge", mergeRouter);
 app.use("/api/hubspot", mergeRouter);
 app.use("/api/prospecting", prospectingRouter);
 app.use("/api/retention", retentionRouter);
+app.use("/api/deal-intelligence", dealIntelligenceRouter);
 app.use("/api/webhooks", webhookRouter);
 app.use("/api/approvals", approvalRouter);
 

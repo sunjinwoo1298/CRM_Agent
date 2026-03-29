@@ -30,6 +30,7 @@ from agents.prospecting_agent.personalization.node import run_personalization
 from agents.prospecting_agent.qa_compliance.node import run_qa_compliance
 from agents.prospecting_agent.research_brief.node import run_research_brief
 from agents.prospecting_agent.target_discovery.node import run_target_discovery
+from agents.deal_intelligence_agent import build_deal_intelligence_report
 from agents.retention_agent import retention_bp
 from common.groq_client import GroqClient
 from common.schemas import ProspectingRequest, ProspectingResponse
@@ -194,6 +195,24 @@ def analyze_pipeline_compat():
             "all_deals": all_deals,
         }
     )
+
+
+@app.post("/agent/deal-intelligence/report")
+def deal_intelligence_report():
+    payload = request.get_json(silent=True) or {}
+    deals = payload.get("deals")
+    health_report = payload.get("health_report")
+
+    if not isinstance(deals, list):
+        return jsonify({"error": "'deals' must be a JSON array"}), 400
+    if not isinstance(health_report, dict):
+        return jsonify({"error": "'health_report' must be an object"}), 400
+
+    try:
+        report = build_deal_intelligence_report(deals=deals, health_report=health_report)
+        return jsonify(report)
+    except Exception as err:  # noqa: BLE001
+        return jsonify({"success": False, "error": str(err)}), 500
 
 
 if __name__ == "__main__":

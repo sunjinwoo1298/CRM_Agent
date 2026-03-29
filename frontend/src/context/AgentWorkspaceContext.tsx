@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { api } from "../api";
 import type { UnifiedDashboardResponse } from "../contracts/unifiedDashboard";
 
-export type AgentType = "revenue" | "prospecting" | "retention";
+export type AgentType = "revenue" | "prospecting" | "retention" | "deal_intelligence";
 export type AgentHealth = "active" | "updating" | "error";
 export type RecommendationState = "pending" | "done" | "dismissed" | "later";
 
@@ -175,6 +175,44 @@ const INITIAL_AGENTS: AgentWorkspace[] = [
         time: "09:05",
         title: "Behavior anomaly detected",
         detail: "Usage drop and ticket surge on three SMB accounts.",
+        severity: "warning",
+      },
+    ],
+  },
+  {
+    id: "deal_intelligence",
+    name: "Deal Intelligence",
+    role: "Real-time stage health monitoring and recovery play generation",
+    status: "active",
+    priority: 2,
+    summary: "Evaluates pipeline stage health, spots risk signals, and suggests talking points.",
+    lastActivity: "1m ago",
+    integrations: ["HubSpot", "Merge", "Agent Runtime", "Groq"],
+    metrics: [
+      { label: "Health Score", value: "74", trend: "live stage-weighted" },
+      { label: "High-Risk Deals", value: "9", trend: "requires follow-up" },
+      { label: "Cycle Reduction", value: "11%", trend: "playbook estimate" },
+    ],
+    chart: [
+      { label: "Mon", value: 68 },
+      { label: "Tue", value: 70 },
+      { label: "Wed", value: 72 },
+      { label: "Thu", value: 73 },
+      { label: "Fri", value: 74 },
+    ],
+    events: [
+      {
+        id: "di-1",
+        time: "09:48",
+        title: "Stage-risk model refreshed",
+        detail: "Talking points generated for stalled contract-stage deals.",
+        severity: "info",
+      },
+      {
+        id: "di-2",
+        time: "09:11",
+        title: "Closed-lost spike flagged",
+        detail: "Detected elevated loss ratio in current weekly cohort.",
         severity: "warning",
       },
     ],

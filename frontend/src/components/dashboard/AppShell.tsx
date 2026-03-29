@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   ChevronDown,
+  Gauge,
   LayoutDashboard,
   ListChecks,
   Menu,
@@ -18,6 +19,7 @@ import { ContextChatAssistant } from "./ContextChatAssistant";
 function titleFromPath(pathname: string): string {
   if (pathname.includes("/summary")) return "Summary and Recommendations";
   if (pathname.includes("/hubspot")) return "HubSpot Full Insights";
+  if (pathname.includes("/deal-intelligence")) return "Deal Intelligence";
   if (pathname.includes("/agents/")) return "Agent Workspace";
   if (pathname.includes("/settings")) return "Workspace Settings";
   return "Dashboard";
@@ -44,6 +46,7 @@ export function AppShell() {
     () => [
       { to: "/app/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
       { to: "/app/hubspot", label: "HubSpot", icon: <Building2 size={18} /> },
+      { to: "/app/deal-intelligence", label: "Deal Intelligence", icon: <Gauge size={18} /> },
       { to: "/app/summary", label: "Summary", icon: <ListChecks size={18} /> },
       { to: "/app/settings", label: "Settings", icon: <ShieldCheck size={18} /> },
     ],
