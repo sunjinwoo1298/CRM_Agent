@@ -13,6 +13,8 @@ import { initializePool, checkDatabaseConnection } from "./db/connection";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
+
+
 app.use(
   cors({
     origin: ["http://localhost:5173"],

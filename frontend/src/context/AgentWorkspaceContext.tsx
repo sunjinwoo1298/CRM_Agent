@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { api } from "../api";
 import type { UnifiedDashboardResponse } from "../contracts/unifiedDashboard";
 
-export type AgentType = "revenue" | "prospecting" | "retention" | "deal_intelligence";
+export type AgentType = "revenue" | "prospecting" | "retention" | "ci";
 export type AgentHealth = "active" | "updating" | "error";
 export type RecommendationState = "pending" | "done" | "dismissed" | "later";
 
@@ -180,40 +180,40 @@ const INITIAL_AGENTS: AgentWorkspace[] = [
     ],
   },
   {
-    id: "deal_intelligence",
-    name: "Deal Intelligence",
-    role: "Real-time stage health monitoring and recovery play generation",
+    id: "ci",
+    name: "Competitive Intelligence",
+    role: "Competitor signal detection and battlecard guidance in active deals",
     status: "active",
     priority: 2,
-    summary: "Evaluates pipeline stage health, spots risk signals, and suggests talking points.",
+    summary: "Tracks competitor mentions and objection themes, then recommends concrete next steps for reps.",
     lastActivity: "1m ago",
-    integrations: ["HubSpot", "Merge", "Agent Runtime", "Groq"],
+    integrations: ["HubSpot", "Salesforce", "Merge", "Gmail"],
     metrics: [
-      { label: "Health Score", value: "74", trend: "live stage-weighted" },
-      { label: "High-Risk Deals", value: "9", trend: "requires follow-up" },
-      { label: "Cycle Reduction", value: "11%", trend: "playbook estimate" },
+      { label: "Analyses Run", value: "0", trend: "start by running CI" },
+      { label: "Threat Level", value: "n/a", trend: "no analysis yet" },
+      { label: "Detected Signals", value: "0", trend: "competitor + objections" },
     ],
     chart: [
-      { label: "Mon", value: 68 },
-      { label: "Tue", value: 70 },
-      { label: "Wed", value: 72 },
-      { label: "Thu", value: 73 },
-      { label: "Fri", value: 74 },
+      { label: "Mon", value: 6 },
+      { label: "Tue", value: 8 },
+      { label: "Wed", value: 9 },
+      { label: "Thu", value: 11 },
+      { label: "Fri", value: 12 },
     ],
     events: [
       {
-        id: "di-1",
-        time: "09:48",
-        title: "Stage-risk model refreshed",
-        detail: "Talking points generated for stalled contract-stage deals.",
+        id: "ci-1",
+        time: "09:28",
+        title: "CI monitor initialized",
+        detail: "Competitive signal stream is ready for opportunity-level analysis.",
         severity: "info",
       },
       {
-        id: "di-2",
-        time: "09:11",
-        title: "Closed-lost spike flagged",
-        detail: "Detected elevated loss ratio in current weekly cohort.",
-        severity: "warning",
+        id: "ci-2",
+        time: "08:50",
+        title: "Battlecard registry synced",
+        detail: "Competitor profiles loaded for active strategy generation.",
+        severity: "success",
       },
     ],
   },
@@ -258,6 +258,16 @@ const INITIAL_RECOMMENDATIONS: Recommendation[] = [
     category: "efficiency",
     impact: "low",
     state: "later",
+    urgent: false,
+  },
+  {
+    id: "rec-5",
+    title: "Run CI deep analysis on top opportunity",
+    description: "Competitive Intelligence agent can generate threat, objections, and next actions for live deal execution.",
+    agentId: "ci",
+    category: "growth",
+    impact: "high",
+    state: "pending",
     urgent: false,
   },
 ];
